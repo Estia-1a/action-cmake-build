@@ -1128,6 +1128,7 @@ function run() {
             const ctestOptions = core.getInput('ctest-options');
             const buildOptions = core.getInput('build-options');
             const installOptions = core.getInput('install-options');
+            const saveLog = core.getInput('save-log');
             const buildDir = core.getInput('build-dir');
             const srcDir = core.getInput('source-dir');
             const logDir = core.getInput('log-dir');
@@ -1168,9 +1169,11 @@ function run() {
             core.endGroup();
             core.startGroup('Building Project');
             const { stdout, stderr } = yield CRunner.build();
-            yield io.mkdirP(logDir);
-            yield (0, promises_1.writeFile)((0, path_1.resolve)(logDir, 'stdout.log'), stdout, 'utf8');
-            yield (0, promises_1.writeFile)((0, path_1.resolve)(logDir, 'stderr.log'), stderr, 'utf8');
+            if (saveLog !== 'false') {
+                yield io.mkdirP(logDir);
+                yield (0, promises_1.writeFile)((0, path_1.resolve)(logDir, 'stdout.log'), stdout, 'utf8');
+                yield (0, promises_1.writeFile)((0, path_1.resolve)(logDir, 'stderr.log'), stderr, 'utf8');
+            }
             core.endGroup();
             if (installBuild !== 'false') {
                 core.startGroup('Installing Build');
