@@ -7,9 +7,13 @@ import fs from 'fs'
 import * as io from '@actions/io'
 
 const actionFile: string = path.join(__dirname, '../action.yml')
-const srcDir: string = path.join(__dirname, '../test', 'DemoProject')
+//const srcDir: string = path.join(__dirname, '../test', 'DemoProject')
 const buildDir: string = path.join(__dirname, '../test', 'build')
 const logDir: string = path.join(__dirname, '../test', 'logs')
+
+const srcDir: string = path.join(
+  '/Users/dimitri/Documents/workspace/enseignement/2022/1a/GenieInfo/Projet/projetGenieInfo_template/'
+)
 
 function setupInputs(): void {
   const parseObj = YAML.parse(fs.readFileSync(actionFile, 'utf-8'))
@@ -32,6 +36,7 @@ test('test runs', () => {
   process.env['INPUT_BUILD-DIR'] = buildDir
   process.env['INPUT_SOURCE-DIR'] = srcDir
   process.env['INPUT_LOG-DIR'] = logDir
+  process.env['INPUT_SAVE-LOG'] = 'true'
   const ip = path.join(__dirname, '..', 'lib', 'main.js')
   const options: cp.ExecSyncOptions = {
     env: process.env,

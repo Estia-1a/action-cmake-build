@@ -1914,6 +1914,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.CMakeRunner = void 0;
 const core = __importStar(__webpack_require__(470));
 const exec = __importStar(__webpack_require__(986));
+const string_decoder_1 = __webpack_require__(304);
 class CMakeRunner {
     constructor(rootDir, buildDir, options) {
         this._cmake = 'cmake';
@@ -1924,18 +1925,34 @@ class CMakeRunner {
     }
     run(executable, args) {
         return __awaiter(this, void 0, void 0, function* () {
+            const output = { exitCode: -1, stdout: '', stderr: '' };
             try {
-                return yield exec.getExecOutput(executable, args);
+                //Using string decoder covers the case where a mult-byte character is split
+                const stdoutDecoder = new string_decoder_1.StringDecoder('utf8');
+                const stderrDecoder = new string_decoder_1.StringDecoder('utf8');
+                const stdErrListener = (data) => {
+                    output.stderr += stderrDecoder.write(data);
+                };
+                const stdOutListener = (data) => {
+                    output.stdout += stdoutDecoder.write(data);
+                };
+                const listeners = {
+                    stdout: stdOutListener,
+                    stderr: stdErrListener
+                };
+                output.exitCode = yield exec.exec(executable, args, { listeners });
+                return output;
             }
             catch (error) {
                 if (error instanceof Error) {
                     core.setFailed(error.message);
-                    return { exitCode: -1, stderr: error.message, stdout: '' };
+                    output.stderr += "\n";
+                    output.stderr += error.message;
                 }
                 else {
                     core.setFailed('');
-                    return { exitCode: -1, stderr: '', stdout: '' };
                 }
+                return output;
             }
         });
     }

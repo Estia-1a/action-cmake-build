@@ -1,6 +1,6 @@
 import * as core from '@actions/core'
 import * as exec from '@actions/exec'
-
+import {StringDecoder} from 'string_decoder'
 export interface CMakeExtraArgs {
   extraConfigArgs?: string
   extraBuildArgs?: string
@@ -28,16 +28,36 @@ export class CMakeRunner {
   }
 
   async run(executable: string, args?: string[]): Promise<exec.ExecOutput> {
+    const output = {exitCode: -1, stdout: '', stderr: ''}
     try {
-      return await exec.getExecOutput(executable, args)
+      //Using string decoder covers the case where a mult-byte character is split
+      const stdoutDecoder = new StringDecoder('utf8')
+      const stderrDecoder = new StringDecoder('utf8')
+
+      const stdErrListener = (data: Buffer): void => {
+        output.stderr += stderrDecoder.write(data)
+      }
+
+      const stdOutListener = (data: Buffer): void => {
+        output.stdout += stdoutDecoder.write(data)
+      }
+
+      const listeners = {
+        stdout: stdOutListener,
+        stderr: stdErrListener
+      }
+
+      output.exitCode = await exec.exec(executable, args, {listeners})
+      return output
     } catch (error) {
       if (error instanceof Error) {
         core.setFailed(error.message)
-        return {exitCode: -1, stderr: error.message, stdout: ''}
+        output.stderr += '\n'
+        output.stderr += error.message
       } else {
         core.setFailed('')
-        return {exitCode: -1, stderr: '', stdout: ''}
       }
+      return output
     }
   }
 
