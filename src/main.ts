@@ -42,6 +42,7 @@ async function run(): Promise<void> {
     const ctestOptions: string = core.getInput('ctest-options')
     const buildOptions: string = core.getInput('build-options')
     const installOptions: string = core.getInput('install-options')
+    const saveLog: string = core.getInput('save-log')
     const buildDir: string = core.getInput('build-dir')
     const srcDir: string = core.getInput('source-dir')
     const logDir: string = core.getInput('log-dir')
@@ -95,9 +96,11 @@ async function run(): Promise<void> {
 
     core.startGroup('Building Project')
     const {stdout, stderr} = await CRunner.build()
-    await io.mkdirP(logDir)
-    await writeFile(resolve(logDir, 'stdout.log'), stdout, 'utf8')
-    await writeFile(resolve(logDir, 'stderr.log'), stderr, 'utf8')
+    if (saveLog !== 'false') {
+      await io.mkdirP(logDir)
+      await writeFile(resolve(logDir, 'stdout.log'), stdout, 'utf8')
+      await writeFile(resolve(logDir, 'stderr.log'), stderr, 'utf8')
+    }
     core.endGroup()
 
     if (installBuild !== 'false') {

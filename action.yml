@@ -50,9 +50,14 @@ inputs:
   ctest-options:
     description: Misc Options to pass to CTest
     required: false
+  save-log:
+    description: Build will output stdout.log and stderr.log
+    default: 'false'
+    required: false
   log-dir:
-    description: Build will output stdout.log and stderr.log 
+    description: directory where to save the log
     default: ${{ github.workspace }}
+    required: false
 
 runs:
   using: 'node12'
