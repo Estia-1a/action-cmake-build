@@ -1,5 +1,5 @@
-import * as exec from '@actions/exec'
 import * as core from '@actions/core'
+import * as exec from '@actions/exec'
 
 export interface CMakeExtraArgs {
   extraConfigArgs?: string
@@ -16,8 +16,8 @@ export interface CMakeOptions {
 }
 
 export class CMakeRunner {
-  _cmake: string = 'cmake'
-  _ctest: string = 'ctest'
+  _cmake = 'cmake'
+  _ctest = 'ctest'
   _options: CMakeOptions
   _rootDir: string
   _buildDir: string
@@ -27,28 +27,33 @@ export class CMakeRunner {
     this._buildDir = buildDir
   }
 
-  async run(executable: string, args?: string[]): Promise<number> {
+  async run(executable: string, args?: string[]): Promise<exec.ExecOutput> {
     try {
-      return await exec.exec(executable, args)
+      return await exec.getExecOutput(executable, args)
     } catch (error) {
-      core.setFailed(error.message)
+      if (error instanceof Error) {
+        core.setFailed(error.message)
+        return {exitCode: -1, stderr: error.message, stdout: ''}
+      } else {
+        core.setFailed('')
+        return {exitCode: -1, stderr: '', stdout: ''}
+      }
     }
-    return -1
   }
 
-  async cmake(args?: string[]): Promise<number> {
+  async cmake(args?: string[]): Promise<exec.ExecOutput> {
     // console.log('cmake ' + args?.join(' '))
     // return new Promise<number>((resolve) => {})
     return await this.run(this._cmake, args)
   }
 
-  async ctest(args?: string[]): Promise<number> {
+  async ctest(args?: string[]): Promise<exec.ExecOutput> {
     // console.log('cmake ' + args?.join(' '))
     // return new Promise<number>((resolve) => {})
     return await this.run(this._ctest, args)
   }
 
-  async configure(): Promise<number> {
+  async configure(): Promise<exec.ExecOutput> {
     let execOptions: string[] = [
       `-DCMAKE_BUILD_TYPE=${this._options.buildType}`,
       `-S${this._rootDir}`,
@@ -64,7 +69,7 @@ export class CMakeRunner {
     return this.cmake(execOptions)
   }
 
-  async build(): Promise<number> {
+  async build(): Promise<exec.ExecOutput> {
     let execOptions: string[] = [
       `--build`,
       this._buildDir,
@@ -86,7 +91,7 @@ export class CMakeRunner {
     return this.cmake(execOptions)
   }
 
-  async install(): Promise<number> {
+  async install(): Promise<exec.ExecOutput> {
     let execOptions: string[] = [`--install`, this._buildDir]
     if (this._options.extraArgs?.extraInstallArgs) {
       execOptions = [
@@ -109,8 +114,8 @@ export class CMakeRunner {
         ...this._options.extraArgs.extraTestArgs.split(' ')
       ]
     }
-    const result: number = await this.ctest(execOptions)
+    const {exitCode} = await this.ctest(execOptions)
     process.chdir(pwdCurrent)
-    return result
+    return exitCode
   }
 }

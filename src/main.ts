@@ -23,8 +23,10 @@
 
 import * as core from '@actions/core'
 import * as io from '@actions/io'
+import * as runner from './cmakerunner'
 import * as util from './util'
-import * as runner from './cmake_runner'
+import {resolve} from 'path'
+import {writeFile} from 'fs/promises'
 
 async function run(): Promise<void> {
   try {
@@ -42,6 +44,7 @@ async function run(): Promise<void> {
     const installOptions: string = core.getInput('install-options')
     const buildDir: string = core.getInput('build-dir')
     const srcDir: string = core.getInput('source-dir')
+    const logDir: string = core.getInput('log-dir')
 
     if (!buildDir) {
       throw Error('Build Directory is not specified')
@@ -91,7 +94,10 @@ async function run(): Promise<void> {
     core.endGroup()
 
     core.startGroup('Building Project')
-    await CRunner.build()
+    const {stdout, stderr} = await CRunner.build()
+    await io.mkdirP(logDir)
+    await writeFile(resolve(logDir, 'stdout.log'), stdout, 'utf8')
+    await writeFile(resolve(logDir, 'stderr.log'), stderr, 'utf8')
     core.endGroup()
 
     if (installBuild !== 'false') {
@@ -106,7 +112,11 @@ async function run(): Promise<void> {
       core.endGroup()
     }
   } catch (error) {
-    core.setFailed(error.message)
+    if (error instanceof Error) {
+      core.setFailed(error.message)
+    } else {
+      core.setFailed('Caught unknown error')
+    }
   }
 }
 

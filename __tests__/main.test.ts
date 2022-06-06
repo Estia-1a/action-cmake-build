@@ -9,6 +9,7 @@ import * as io from '@actions/io'
 const actionFile: string = path.join(__dirname, '../action.yml')
 const srcDir: string = path.join(__dirname, '../test', 'DemoProject')
 const buildDir: string = path.join(__dirname, '../test', 'build')
+const logDir: string = path.join(__dirname, '../test', 'logs')
 
 function setupInputs(): void {
   const parseObj = YAML.parse(fs.readFileSync(actionFile, 'utf-8'))
@@ -30,6 +31,7 @@ test('test runs', () => {
   // cd into source dir
   process.env['INPUT_BUILD-DIR'] = buildDir
   process.env['INPUT_SOURCE-DIR'] = srcDir
+  process.env['INPUT_LOG-DIR'] = logDir
   const ip = path.join(__dirname, '..', 'lib', 'main.js')
   const options: cp.ExecSyncOptions = {
     env: process.env,

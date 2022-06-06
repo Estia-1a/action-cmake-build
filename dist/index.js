@@ -19,7 +19,13 @@ module.exports =
 /******/ 		};
 /******/
 /******/ 		// Execute the module function
-/******/ 		modules[moduleId].call(module.exports, module, module.exports, __webpack_require__);
+/******/ 		var threw = true;
+/******/ 		try {
+/******/ 			modules[moduleId].call(module.exports, module, module.exports, __webpack_require__);
+/******/ 			threw = false;
+/******/ 		} finally {
+/******/ 			if(threw) delete installedModules[moduleId];
+/******/ 		}
 /******/
 /******/ 		// Flag the module as loaded
 /******/ 		module.l = true;
@@ -345,6 +351,25 @@ function copyFile(srcFile, destFile, force) {
 
 "use strict";
 
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -354,20 +379,15 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
-    result["default"] = mod;
-    return result;
-};
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.argStringToArray = exports.ToolRunner = void 0;
 const os = __importStar(__webpack_require__(87));
 const events = __importStar(__webpack_require__(614));
 const child = __importStar(__webpack_require__(129));
 const path = __importStar(__webpack_require__(622));
 const io = __importStar(__webpack_require__(1));
 const ioUtil = __importStar(__webpack_require__(672));
+const timers_1 = __webpack_require__(213);
 /* eslint-disable @typescript-eslint/unbound-method */
 const IS_WINDOWS = process.platform === 'win32';
 /*
@@ -437,11 +457,12 @@ class ToolRunner extends events.EventEmitter {
                 s = s.substring(n + os.EOL.length);
                 n = s.indexOf(os.EOL);
             }
-            strBuffer = s;
+            return s;
         }
         catch (err) {
             // streaming lines to console is best effort.  Don't fail a build.
             this._debug(`error processing line. Failed with error ${err}`);
+            return '';
         }
     }
     _getSpawnFileName() {
@@ -723,7 +744,7 @@ class ToolRunner extends events.EventEmitter {
             // if the tool is only a file name, then resolve it from the PATH
             // otherwise verify it exists (add extension on Windows if necessary)
             this.toolPath = yield io.which(this.toolPath, true);
-            return new Promise((resolve, reject) => {
+            return new Promise((resolve, reject) => __awaiter(this, void 0, void 0, function* () {
                 this._debug(`exec tool: ${this.toolPath}`);
                 this._debug('arguments:');
                 for (const arg of this.args) {
@@ -737,9 +758,12 @@ class ToolRunner extends events.EventEmitter {
                 state.on('debug', (message) => {
                     this._debug(message);
                 });
+                if (this.options.cwd && !(yield ioUtil.exists(this.options.cwd))) {
+                    return reject(new Error(`The cwd: ${this.options.cwd} does not exist!`));
+                }
                 const fileName = this._getSpawnFileName();
                 const cp = child.spawn(fileName, this._getSpawnArgs(optionsNonNull), this._getSpawnOptions(this.options, fileName));
-                const stdbuffer = '';
+                let stdbuffer = '';
                 if (cp.stdout) {
                     cp.stdout.on('data', (data) => {
                         if (this.options.listeners && this.options.listeners.stdout) {
@@ -748,14 +772,14 @@ class ToolRunner extends events.EventEmitter {
                         if (!optionsNonNull.silent && optionsNonNull.outStream) {
                             optionsNonNull.outStream.write(data);
                         }
-                        this._processLineBuffer(data, stdbuffer, (line) => {
+                        stdbuffer = this._processLineBuffer(data, stdbuffer, (line) => {
                             if (this.options.listeners && this.options.listeners.stdline) {
                                 this.options.listeners.stdline(line);
                             }
                         });
                     });
                 }
-                const errbuffer = '';
+                let errbuffer = '';
                 if (cp.stderr) {
                     cp.stderr.on('data', (data) => {
                         state.processStderr = true;
@@ -770,7 +794,7 @@ class ToolRunner extends events.EventEmitter {
                                 : optionsNonNull.outStream;
                             s.write(data);
                         }
-                        this._processLineBuffer(data, errbuffer, (line) => {
+                        errbuffer = this._processLineBuffer(data, errbuffer, (line) => {
                             if (this.options.listeners && this.options.listeners.errline) {
                                 this.options.listeners.errline(line);
                             }
@@ -817,7 +841,7 @@ class ToolRunner extends events.EventEmitter {
                     }
                     cp.stdin.end(this.options.input);
                 }
-            });
+            }));
         });
     }
 }
@@ -903,7 +927,7 @@ class ExecState extends events.EventEmitter {
             this._setResult();
         }
         else if (this.processExited) {
-            this.timeout = setTimeout(ExecState.HandleTimeout, this.delay, this);
+            this.timeout = timers_1.setTimeout(ExecState.HandleTimeout, this.delay, this);
         }
     }
     _debug(message) {
@@ -1016,154 +1040,6 @@ exports.issueCommand = issueCommand;
 
 /***/ }),
 
-/***/ 123:
-/***/ (function(__unusedmodule, exports, __webpack_require__) {
-
-"use strict";
-
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.CMakeRunner = void 0;
-const exec = __importStar(__webpack_require__(986));
-const core = __importStar(__webpack_require__(470));
-class CMakeRunner {
-    constructor(rootDir, buildDir, options) {
-        this._cmake = 'cmake';
-        this._ctest = 'ctest';
-        this._options = options;
-        this._rootDir = rootDir;
-        this._buildDir = buildDir;
-    }
-    run(executable, args) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                return yield exec.exec(executable, args);
-            }
-            catch (error) {
-                core.setFailed(error.message);
-            }
-            return -1;
-        });
-    }
-    cmake(args) {
-        return __awaiter(this, void 0, void 0, function* () {
-            // console.log('cmake ' + args?.join(' '))
-            // return new Promise<number>((resolve) => {})
-            return yield this.run(this._cmake, args);
-        });
-    }
-    ctest(args) {
-        return __awaiter(this, void 0, void 0, function* () {
-            // console.log('cmake ' + args?.join(' '))
-            // return new Promise<number>((resolve) => {})
-            return yield this.run(this._ctest, args);
-        });
-    }
-    configure() {
-        var _a;
-        return __awaiter(this, void 0, void 0, function* () {
-            let execOptions = [
-                `-DCMAKE_BUILD_TYPE=${this._options.buildType}`,
-                `-S${this._rootDir}`,
-                `-B${this._buildDir}`
-            ];
-            if ((_a = this._options.extraArgs) === null || _a === void 0 ? void 0 : _a.extraConfigArgs) {
-                execOptions = [
-                    ...this._options.extraArgs.extraConfigArgs.split(' '),
-                    ...execOptions
-                ];
-            }
-            return this.cmake(execOptions);
-        });
-    }
-    build() {
-        var _a;
-        return __awaiter(this, void 0, void 0, function* () {
-            let execOptions = [
-                `--build`,
-                this._buildDir,
-                '--config',
-                this._options.buildType
-            ];
-            if (this._options.target) {
-                execOptions = [...execOptions, '--target', this._options.target];
-            }
-            if (this._options.parallel) {
-                execOptions = [...execOptions, '--parallel', this._options.parallel];
-            }
-            if ((_a = this._options.extraArgs) === null || _a === void 0 ? void 0 : _a.extraBuildArgs) {
-                execOptions = [
-                    ...execOptions,
-                    ...this._options.extraArgs.extraBuildArgs.split(' ')
-                ];
-            }
-            return this.cmake(execOptions);
-        });
-    }
-    install() {
-        var _a;
-        return __awaiter(this, void 0, void 0, function* () {
-            let execOptions = [`--install`, this._buildDir];
-            if ((_a = this._options.extraArgs) === null || _a === void 0 ? void 0 : _a.extraInstallArgs) {
-                execOptions = [
-                    ...execOptions,
-                    ...this._options.extraArgs.extraInstallArgs.split(' ')
-                ];
-            }
-            return this.cmake(execOptions);
-        });
-    }
-    test() {
-        var _a;
-        return __awaiter(this, void 0, void 0, function* () {
-            const pwdCurrent = process.cwd();
-            process.chdir(this._buildDir);
-            // '-C' is required for multiconfig build systems
-            let execOptions = ['-C', this._options.buildType];
-            if ((_a = this._options.extraArgs) === null || _a === void 0 ? void 0 : _a.extraTestArgs) {
-                execOptions = [
-                    ...execOptions,
-                    ...this._options.extraArgs.extraTestArgs.split(' ')
-                ];
-            }
-            const result = yield this.ctest(execOptions);
-            process.chdir(pwdCurrent);
-            return result;
-        });
-    }
-}
-exports.CMakeRunner = CMakeRunner;
-
-
-/***/ }),
-
 /***/ 129:
 /***/ (function(module) {
 
@@ -1200,7 +1076,11 @@ module.exports = require("child_process");
  */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
-    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
 }) : (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     o[k2] = m[k];
@@ -1213,7 +1093,7 @@ var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (
 var __importStar = (this && this.__importStar) || function (mod) {
     if (mod && mod.__esModule) return mod;
     var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
     __setModuleDefault(result, mod);
     return result;
 };
@@ -1229,8 +1109,10 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 const core = __importStar(__webpack_require__(470));
 const io = __importStar(__webpack_require__(1));
+const runner = __importStar(__webpack_require__(696));
 const util = __importStar(__webpack_require__(345));
-const runner = __importStar(__webpack_require__(123));
+const path_1 = __webpack_require__(622);
+const promises_1 = __webpack_require__(225);
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
@@ -1248,6 +1130,7 @@ function run() {
             const installOptions = core.getInput('install-options');
             const buildDir = core.getInput('build-dir');
             const srcDir = core.getInput('source-dir');
+            const logDir = core.getInput('log-dir');
             if (!buildDir) {
                 throw Error('Build Directory is not specified');
             }
@@ -1284,7 +1167,10 @@ function run() {
             yield CRunner.configure();
             core.endGroup();
             core.startGroup('Building Project');
-            yield CRunner.build();
+            const { stdout, stderr } = yield CRunner.build();
+            yield io.mkdirP(logDir);
+            yield (0, promises_1.writeFile)((0, path_1.resolve)(logDir, 'stdout.log'), stdout, 'utf8');
+            yield (0, promises_1.writeFile)((0, path_1.resolve)(logDir, 'stderr.log'), stderr, 'utf8');
             core.endGroup();
             if (installBuild !== 'false') {
                 core.startGroup('Installing Build');
@@ -1298,7 +1184,12 @@ function run() {
             }
         }
         catch (error) {
-            core.setFailed(error.message);
+            if (error instanceof Error) {
+                core.setFailed(error.message);
+            }
+            else {
+                core.setFailed('Caught unknown error');
+            }
         }
     });
 }
@@ -1307,41 +1198,32 @@ run();
 
 /***/ }),
 
+/***/ 213:
+/***/ (function(module) {
+
+module.exports = require("timers");
+
+/***/ }),
+
+/***/ 225:
+/***/ (function(module) {
+
+module.exports = require("fs/promises");
+
+/***/ }),
+
+/***/ 304:
+/***/ (function(module) {
+
+module.exports = require("string_decoder");
+
+/***/ }),
+
 /***/ 345:
 /***/ (function(__unusedmodule, exports, __webpack_require__) {
 
 "use strict";
 
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateSubmodules = exports.fixPath = void 0;
 /*
  * MIT License
  *
@@ -1364,9 +1246,43 @@ exports.updateSubmodules = exports.fixPath = void 0;
  * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH
  * THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-const io = __importStar(__webpack_require__(1));
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.updateSubmodules = exports.fixPath = void 0;
 const core = __importStar(__webpack_require__(470));
 const exec = __importStar(__webpack_require__(986));
+const io = __importStar(__webpack_require__(1));
 const path = __importStar(__webpack_require__(622));
 function fixPath() {
     var _a;
@@ -1954,6 +1870,164 @@ function isUnixExecutable(stats) {
 
 /***/ }),
 
+/***/ 696:
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.CMakeRunner = void 0;
+const core = __importStar(__webpack_require__(470));
+const exec = __importStar(__webpack_require__(986));
+class CMakeRunner {
+    constructor(rootDir, buildDir, options) {
+        this._cmake = 'cmake';
+        this._ctest = 'ctest';
+        this._options = options;
+        this._rootDir = rootDir;
+        this._buildDir = buildDir;
+    }
+    run(executable, args) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                return yield exec.getExecOutput(executable, args);
+            }
+            catch (error) {
+                if (error instanceof Error) {
+                    core.setFailed(error.message);
+                    return { exitCode: -1, stderr: error.message, stdout: '' };
+                }
+                else {
+                    core.setFailed('');
+                    return { exitCode: -1, stderr: '', stdout: '' };
+                }
+            }
+        });
+    }
+    cmake(args) {
+        return __awaiter(this, void 0, void 0, function* () {
+            // console.log('cmake ' + args?.join(' '))
+            // return new Promise<number>((resolve) => {})
+            return yield this.run(this._cmake, args);
+        });
+    }
+    ctest(args) {
+        return __awaiter(this, void 0, void 0, function* () {
+            // console.log('cmake ' + args?.join(' '))
+            // return new Promise<number>((resolve) => {})
+            return yield this.run(this._ctest, args);
+        });
+    }
+    configure() {
+        var _a;
+        return __awaiter(this, void 0, void 0, function* () {
+            let execOptions = [
+                `-DCMAKE_BUILD_TYPE=${this._options.buildType}`,
+                `-S${this._rootDir}`,
+                `-B${this._buildDir}`
+            ];
+            if ((_a = this._options.extraArgs) === null || _a === void 0 ? void 0 : _a.extraConfigArgs) {
+                execOptions = [
+                    ...this._options.extraArgs.extraConfigArgs.split(' '),
+                    ...execOptions
+                ];
+            }
+            return this.cmake(execOptions);
+        });
+    }
+    build() {
+        var _a;
+        return __awaiter(this, void 0, void 0, function* () {
+            let execOptions = [
+                `--build`,
+                this._buildDir,
+                '--config',
+                this._options.buildType
+            ];
+            if (this._options.target) {
+                execOptions = [...execOptions, '--target', this._options.target];
+            }
+            if (this._options.parallel) {
+                execOptions = [...execOptions, '--parallel', this._options.parallel];
+            }
+            if ((_a = this._options.extraArgs) === null || _a === void 0 ? void 0 : _a.extraBuildArgs) {
+                execOptions = [
+                    ...execOptions,
+                    ...this._options.extraArgs.extraBuildArgs.split(' ')
+                ];
+            }
+            return this.cmake(execOptions);
+        });
+    }
+    install() {
+        var _a;
+        return __awaiter(this, void 0, void 0, function* () {
+            let execOptions = [`--install`, this._buildDir];
+            if ((_a = this._options.extraArgs) === null || _a === void 0 ? void 0 : _a.extraInstallArgs) {
+                execOptions = [
+                    ...execOptions,
+                    ...this._options.extraArgs.extraInstallArgs.split(' ')
+                ];
+            }
+            return this.cmake(execOptions);
+        });
+    }
+    test() {
+        var _a;
+        return __awaiter(this, void 0, void 0, function* () {
+            const pwdCurrent = process.cwd();
+            process.chdir(this._buildDir);
+            // '-C' is required for multiconfig build systems
+            let execOptions = ['-C', this._options.buildType];
+            if ((_a = this._options.extraArgs) === null || _a === void 0 ? void 0 : _a.extraTestArgs) {
+                execOptions = [
+                    ...execOptions,
+                    ...this._options.extraArgs.extraTestArgs.split(' ')
+                ];
+            }
+            const { exitCode } = yield this.ctest(execOptions);
+            process.chdir(pwdCurrent);
+            return exitCode;
+        });
+    }
+}
+exports.CMakeRunner = CMakeRunner;
+
+
+/***/ }),
+
 /***/ 747:
 /***/ (function(module) {
 
@@ -1966,6 +2040,25 @@ module.exports = require("fs");
 
 "use strict";
 
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -1975,14 +2068,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
-    result["default"] = mod;
-    return result;
-};
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.getExecOutput = exports.exec = void 0;
+const string_decoder_1 = __webpack_require__(304);
 const tr = __importStar(__webpack_require__(9));
 /**
  * Exec a command.
@@ -2008,6 +2096,51 @@ function exec(commandLine, args, options) {
     });
 }
 exports.exec = exec;
+/**
+ * Exec a command and get the output.
+ * Output will be streamed to the live console.
+ * Returns promise with the exit code and collected stdout and stderr
+ *
+ * @param     commandLine           command to execute (can include additional args). Must be correctly escaped.
+ * @param     args                  optional arguments for tool. Escaping is handled by the lib.
+ * @param     options               optional exec options.  See ExecOptions
+ * @returns   Promise<ExecOutput>   exit code, stdout, and stderr
+ */
+function getExecOutput(commandLine, args, options) {
+    var _a, _b;
+    return __awaiter(this, void 0, void 0, function* () {
+        let stdout = '';
+        let stderr = '';
+        //Using string decoder covers the case where a mult-byte character is split
+        const stdoutDecoder = new string_decoder_1.StringDecoder('utf8');
+        const stderrDecoder = new string_decoder_1.StringDecoder('utf8');
+        const originalStdoutListener = (_a = options === null || options === void 0 ? void 0 : options.listeners) === null || _a === void 0 ? void 0 : _a.stdout;
+        const originalStdErrListener = (_b = options === null || options === void 0 ? void 0 : options.listeners) === null || _b === void 0 ? void 0 : _b.stderr;
+        const stdErrListener = (data) => {
+            stderr += stderrDecoder.write(data);
+            if (originalStdErrListener) {
+                originalStdErrListener(data);
+            }
+        };
+        const stdOutListener = (data) => {
+            stdout += stdoutDecoder.write(data);
+            if (originalStdoutListener) {
+                originalStdoutListener(data);
+            }
+        };
+        const listeners = Object.assign(Object.assign({}, options === null || options === void 0 ? void 0 : options.listeners), { stdout: stdOutListener, stderr: stdErrListener });
+        const exitCode = yield exec(commandLine, args, Object.assign(Object.assign({}, options), { listeners }));
+        //flush any remaining characters
+        stdout += stdoutDecoder.end();
+        stderr += stderrDecoder.end();
+        return {
+            exitCode,
+            stdout,
+            stderr
+        };
+    });
+}
+exports.getExecOutput = getExecOutput;
 //# sourceMappingURL=exec.js.map
 
 /***/ })

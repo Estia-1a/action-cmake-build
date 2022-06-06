@@ -2,14 +2,14 @@ name: 'Build CMake'
 description: 'Configure, Build and Test a CMake project'
 author: 'Ashutosh Varma'
 inputs:
-  source-dir: 
+  source-dir:
     description: Source root directory where top level CMake script is present
     default: ${{ github.workspace }}
   build-dir:
     description: Build directory where build files will be generated
     default: "${{ github.workspace }}/../build"
     required: true
-  build-type:              
+  build-type:
     description: 'CMake build type (Release, Debug, MinSizeRel, RelWithDebInfo)'
     default: 'Release'
     required: true
@@ -50,11 +50,14 @@ inputs:
   ctest-options:
     description: Misc Options to pass to CTest
     required: false
-  
+  log-dir:
+    description: Build will output stdout.log and stderr.log 
+    default: ${{ github.workspace }}
+
 runs:
   using: 'node12'
   main: 'dist/index.js'
 
 branding:
-  icon: 'feather'  
+  icon: 'feather'
   color: 'blue'
